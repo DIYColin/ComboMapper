@@ -3,8 +3,18 @@
 
 class ComboMapper {
   static DoublePress := 500
-  static defaultConf := {press: '', pressRelease: '', release: '', map: false, default: true}
-  static initConf := {press: '', pressRelease: '', release: '', map: false, default: false}
+  static actionHooks := Map('press', true, 'pressRelease', true, 'release', true)
+  static defaultConf := {press: false, pressRelease: false, release: false, map: false, default: true}
+  static initConf := {press: false, pressRelease: false, release: false, map: false, default: false}
+
+  static setupAction(val){
+    Switch(Type(val)){
+      Case 'String':
+        return (*) => Send(val)
+      Case 'Func', 'BoundFunc':
+        return val
+    }
+  }
 
   mouseMap := Map()
 
@@ -18,6 +28,9 @@ class ComboMapper {
   
   state := Map()
 
+  queue := []
+  stopped := true
+
   __New(){
     this.mapMouse(1, 'LButton', 'L')
     this.mapMouse(2, 'RButton', 'R')
@@ -30,14 +43,27 @@ class ComboMapper {
     this.mapMouse('WR', 'WheelRight', 'WR', false)
   }
 
-  mapMouse(index, trigger, click := '', release := true){
-    this.mouseMap['*' trigger] := {index: index, click: click, release: release}
-    this.state[index] := {trigger: trigger, level: false, unset: true}
+  mapMouse(index, trigger, button := '', release := true){
+    this.mouseMap['*' trigger] := {index: index, handle: (_, key) => this.press(key)}
+    if(release){
+      this.mouseMap['*' trigger ' Up'] := {index: index, handle:  (_, key) => this.release(key)}
+    }
+    if(release){
+      press := (*) => Click(button, 'D')
+      release := (*) => Click(button, 'U')
+    }else{
+      press := (*) => Click(button)
+    }
+    this.state[index] := {trigger: trigger, press: press, release: release, config: false, map: false, unset: true}
   }
 
   mapCombo(trigger, config){
+
     newconfig := ComboMapper.initConf.Clone()
     for key, val in config.OwnProps() {
+      if(ComboMapper.actionHooks.Has(key)){
+        val := ComboMapper.setupAction(val)
+      }
       newconfig.DefineProp(key, {value: val})
     }
     current := trigger[1]
@@ -53,7 +79,10 @@ class ComboMapper {
         count := 1
       }
       if(this.state[current].unset){
-        Hotkey('*' this.state[current].trigger, this.handle.Bind(this))
+        Hotkey('*' this.state[current].trigger, (key) => (this.handle(key)))
+        if(this.state[current].release){
+          Hotkey('*' this.state[current].trigger ' Up', (key) => (this.handle(key)))
+        }
         this.state[current].unset := false
       }
       if(currentMap.Has(trigger[A_Index])){
@@ -72,74 +101,90 @@ class ComboMapper {
   }
 
   handle(key){
-    static trigger(val){
-      Switch(Type(val)){
-        Case 'String':
-          Send val
-        Case 'Func', 'BoundFunc':
-          val()
+    this.queue.Push(key)
+
+    if(this.stopped){
+      this.stopped := false
+      while(this.queue.Length){
+        config := this.mouseMap[this.queue.RemoveAt(1)]
+        config.handle(config.index)
       }
+      this.stopped := true
     }
+  }
 
-    mouseKey := this.mouseMap[key]
-
-    currentMap := this.currentMap
-    loop{
-      currentKey := currentMap.val.Get(mouseKey.index, false)
-      if(currentKey){
-        if(this.lastPressed = mouseKey.index && A_TickCount-this.pressed < ComboMapper.DoublePress){
-          this.count := Mod(this.count, currentKey.Length) + 1
-        }else{
-          this.count := 1
+  press(mouseKey){
+    state := this.state[mouseKey]
+    if(!state.config){
+      currentMap := this.currentMap
+      loop{
+        currentKey := currentMap.val.Get(mouseKey, false)
+        if(currentKey){
+          if(this.lastPressed = mouseKey && A_TickCount - this.pressed < ComboMapper.DoublePress){
+            this.count := Mod(this.count, currentKey.Length) + 1
+          }else{
+            this.count := 1
+          }
+          currentConf := currentKey[this.count]
+          currentMap := false
+          break
         }
-        currentConf := currentKey[this.count]
-        currentMap := false
-        break
+        if(!(currentMap := currentMap.prev)){
+          currentConf := ComboMapper.defaultConf
+          break
+        }
       }
-      if(!(currentMap := currentMap.prev)){
-        currentConf := ComboMapper.defaultConf
-        break
+  
+      state.config := currentConf
+  
+      this.lastPressed := mouseKey
+      this.pressed := A_TickCount
+  
+      if(currentConf.map){
+        this.currentMap := this.currentMap.next := state.map := {val: currentConf.map, prev: this.currentMap, next: false}
+      }
+  
+      if(currentConf.default){
+        state.press()
+      }
+  
+      if(currentConf.press){
+        currentConf.press()
+      }
+  
+      if(!state.release){
+        this.release(mouseKey)
       }
     }
+  }
 
-    this.lastPressed := mouseKey.index
-    this.pressed := A_TickCount
-
-    if(currentConf.map){
-      this.currentMap := this.currentMap.next := currentMap := {val: currentConf.map, prev: this.currentMap, next: false}
-    }
-
-    if(currentConf.default){
-      if(mouseKey.release){
-        Click(mouseKey.click, 'D')
-      }else{
-        Click(mouseKey.click)
+  release(mouseKey){
+    state := this.state[mouseKey]
+    currentConf := state.config 
+    if(currentConf){
+      if(currentConf.pressRelease){
+        currentConf.pressRelease()
       }
-    }
 
-    trigger(currentConf.press)
-
-    if(mouseKey.release){
-      KeyWait(this.state[mouseKey.index].trigger)
-    }
-
-    trigger(currentConf.pressRelease)
-
-    if(this.lastPressed = mouseKey.index){
-      trigger(currentConf.release)
-    }
-
-    if(currentConf.default && mouseKey.release){
-      Click(mouseKey.click, 'U')
-    }
-    
-    if(currentMap){
-      currentMap.prev.next := currentMap.next
-      if(currentMap.next){
-        currentMap.next.prev := currentMap.prev
-      }else{
-        this.currentMap := currentMap.prev
+      if(this.lastPressed = mouseKey && currentConf.release){
+        currentConf.release()
       }
+
+      if(currentConf.default && state.release){
+        state.release()
+      }
+      
+      if(state.map){
+        state.map.prev.next := state.map.next
+        if(state.map.next){
+          state.map.next.prev := state.map.prev
+        }else{
+          this.currentMap := state.map.prev
+        }
+        state.map := false
+      }
+
+      state.config := false
     }
   }
 }
