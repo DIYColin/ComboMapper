@@ -48,13 +48,19 @@ class ComboMapper {
     if(release){
       this.mouseMap['*' trigger ' Up'] := {index: index, handle:  (_, key) => this.release(key)}
     }
-    if(release){
-      press := (*) => Click(button, 'D')
-      release := (*) => Click(button, 'U')
+    if(button){
+      if(release){
+        bpress := (*) => Click(button, 'D')
+        brelease := (*) => Click(button, 'U')
+      }else{
+        bpress := (*) => Click(button)
+        brelease := false
+      }
     }else{
-      press := (*) => Click(button)
+      bpress := false
+      brelease := false
     }
-    this.state[index] := {trigger: trigger, press: press, release: release, config: false, map: false, unset: true}
+    this.state[index] := {trigger: trigger, bpress: bpress, brelease: brelease, release: release, config: false, map: false, unset: true}
   }
 
   mapCombo(trigger, config){
@@ -144,8 +150,8 @@ class ComboMapper {
         this.currentMap := this.currentMap.next := state.map := {val: currentConf.map, prev: this.currentMap, next: false}
       }
   
-      if(currentConf.default){
-        state.press()
+      if(currentConf.default && state.bpress){
+        state.bpress()
       }
   
       if(currentConf.press){
@@ -170,8 +176,8 @@ class ComboMapper {
         currentConf.release()
       }
 
-      if(currentConf.default && state.release){
-        state.release()
+      if(currentConf.default && state.brelease){
+        state.brelease()
       }
       
       if(state.map){
