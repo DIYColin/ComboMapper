@@ -72,6 +72,15 @@ class ComboMapper {
   }
 
   handle(key){
+    static trigger(val){
+      Switch(Type(val)){
+        Case 'String':
+          Send val
+        Case 'Func', 'BoundFunc':
+          val()
+      }
+    }
+
     mouseKey := this.mouseMap[key]
 
     currentMap := this.currentMap
@@ -108,16 +117,16 @@ class ComboMapper {
       }
     }
 
-    Send(currentConf.press)
+    trigger(currentConf.press)
 
     if(mouseKey.release){
       KeyWait(this.state[mouseKey.index].trigger)
     }
 
-    Send(currentConf.pressRelease)
+    trigger(currentConf.pressRelease)
 
     if(this.lastPressed = mouseKey.index){
-      Send(currentConf.release)
+      trigger(currentConf.release)
     }
 
     if(currentConf.default && mouseKey.release){
@@ -141,8 +150,24 @@ cm.mapCombo([1, 4], {press: '{ctrl down}', pressRelease: '{ctrl up}'})     ;-- D
 cm.mapCombo([1, 5], {press: '{shift down}', pressRelease: '{shift up}'})   ;-- Drag and Drop Datei verschieben
 cm.mapCombo([3, 2], {release: '^+i'})                                      ;-- Entwicklertools öffnen
 cm.mapCombo([3, 3], {release: '^w'})                                       ;-- Tab schließen
-cm.mapCombo([3, 3, 'WU'], {press: '#^{left}'})                             ;-- vorheriger Virtueller Desktop                   ;Not working because Windows check for physical Win key press
-cm.mapCombo([3, 3, 'WD'], {press: '#^{right}'})                            ;-- nächster Virtueller Desktop                     ;Not working because Windows check for physical Win key press
+cm.mapCombo([3, 3, 'WU'], {press: '^#{left}'})                             ;-- vorheriger Virtueller Desktop
+cm.mapCombo([3, 3, 'WD'], {press: '^#{right}'})                            ;-- nächster Virtueller Desktop
+cm.mapCombo([3, 3, 4, 'WU'], {press: (*) => (                              ;-- vorheriger Virtueller Desktop Fenster mitnehmen
+  Title := WinGetTitle('A'),
+  WinSetExStyle('^0x80', Title),
+  Send('^#{left}'),
+  sleep(50),
+  WinSetExStyle('^0x80', Title),
+  WinActivate(Title)
+)})
+cm.mapCombo([3, 3, 4, 'WD'], {press: (*) => (                              ;-- nächster Virtueller Desktop Fenster mitnehmen
+  Title := WinGetTitle('A'),
+  WinSetExStyle('^0x80', Title),
+  Send('^#{right}'),
+  sleep(50),
+  WinSetExStyle('^0x80', Title),
+  WinActivate(Title)
+)})
 cm.mapCombo([3, 4], {release: '^t'})                                       ;-- Tab öffnen
 cm.mapCombo([3, 4, 5], {release: '^+t'})                                   ;-- Geschlossenen Tab öffnen
 cm.mapCombo([3, 5], {release: '^n'})                                       ;-- Fenster öffnen
@@ -161,4 +186,4 @@ cm.mapCombo([5, 4, 'WU'], {press: '+{tab}'})                               ;-- F
 cm.mapCombo([5, 4, 'WD'], {press: '{tab}'})                                ;-- Fenster wechsel vor
 cm.mapCombo([5, 'WU'], {press: '^y'})                                      ;-- Vorgängig
 cm.mapCombo([5, 'WD'], {press: '^z'})                                      ;-- Rückgängig
-cm.mapCombo([6, 6], {release: '#l'})                                       ;-- Logout                                             ;to be changed to DllCall("LockWorkStation") because Windows check for physical Win key press
+cm.mapCombo([6, 6], {release: (*) => DllCall('LockWorkStation')})          ;-- Logout
